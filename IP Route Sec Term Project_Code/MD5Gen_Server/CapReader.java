@@ -1,0 +1,179 @@
+package routeSec;
+
+
+
+/******************************************************************************
+*CapReader.java: Written as a part of RouteSec Term project for CSC/ECE573
+*Authors: Aditya Vyas, Bhavin Shah, Manshi Choudhry, Spoorthi Gururaj 
+*Date: 20 Nov 2012
+*Written and compiled on Ubuntu 12.04, Eclipse IDE 
+*******************************************************************************
+*This program uses jNetPCap library available under open-source LGPL license
+*http://jnetpcap.com/
+*******************************************************************************
+*The program forms the portion of the project where we generate the MD5 hash 
+*of the packets in the communication between the client and the server. 
+*Also used to visually verify the authenticity of the packets as a work around
+*to TCP_MD5 sig option.
+*This version listens to and calculates MD5 hash pf packets directly off the NIC
+*as opposed to its client counterpart that uses a file.
+*******************************************************************************
+*Running instructions : The program has to be run with root privilege 
+*otherwire jNetPcap is not able to find a list of devices. 
+*******************************************************************************
+*Generates a .csv file with a list of every packet and its MD5 Hash
+******************************************************************************/
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;  
+import java.util.Arrays;
+import java.util.Date;  
+import java.util.List;  
+
+import org.jnetpcap.Pcap;  
+import org.jnetpcap.PcapIf;  
+import org.jnetpcap.packet.JMemoryPacket;
+import org.jnetpcap.packet.PcapPacket;  
+import org.jnetpcap.packet.PcapPacketHandler;  
+import org.jnetpcap.packet.format.FormatUtils;
+import org.jnetpcap.protocol.lan.Ethernet;
+import org.jnetpcap.protocol.network.Ip4;
+import org.jnetpcap.protocol.tcpip.Http;
+import org.jnetpcap.protocol.tcpip.Tcp;
+import java.io.FileWriter;
+import java.io.IOException;
+
+/******************************************************************************
+*Class: CapReader
+*The starter class for CapReader.java
+******************************************************************************/
+
+
+public class CapReader {
+	
+	public static void main(String args[]) throws IOException{
+		
+//Building string for error messages
+
+    	final StringBuilder errbuf = new StringBuilder(); // For any error msgs
+
+//Getting a list of available nics    
+		List<PcapIf> alldevs = new ArrayList<PcapIf>();  
+
+//Ensure that the program is executed as root. Otherwise no interfaces would be found.
+
+		int r = Pcap.findAllDevs(alldevs, errbuf);  
+		if (r == Pcap.NOT_OK || alldevs.isEmpty()) {  
+			System.out.printf("Cannot read list of devices. Do you have root privilege ? %s", errbuf  
+					.toString());  
+			return;  
+		}  
+		else
+		{
+			System.out.println(r + "This is the Status Code");
+		}
+
+		System.out.println("Network devices found:");  
+
+		int i = 0;  
+		for (PcapIf device : alldevs) {  
+			String description =  
+					(device.getDescription() != null) ? device.getDescription()  
+							: "No description available";  
+					System.out.printf("#%d: %s [%s]\n", i++, device.getName(), description);  
+		}  
+
+//Select the appropriate interface to read and capture packets.
+     		
+		System.out.println("Enter the interface number to capture packets");
+		PcapIf device = null;
+		try{
+			InputStreamReader daa = new InputStreamReader(System.in);
+			BufferedReader inaa = new BufferedReader(daa);
+			String l= inaa.readLine().trim();
+			Integer j = Integer.valueOf(l);
+			device = alldevs.get(j);
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+
+// Capture all packets, no trucation     
+		
+		int snaplen = 64 * 1024;
+            
+//Capture packets in promiscuous mode
+
+		int flags = Pcap.MODE_PROMISCUOUS; 
+		int timeout = 60 * 1000;             
+		final Pcap pcap =  
+				Pcap.openLive(device.getName(), snaplen, flags, timeout, errbuf);  
+
+		if (pcap == null) {  
+			System.err.printf("Error while opening device for capture: "  
+					+ errbuf.toString());  
+			return;  
+		}  
+
+/******************************************************************************
+* Packet handler to be called every time a packet is received. 
+******************************************************************************/
+
+	PcapPacketHandler<String> jpacketHandler = new PcapPacketHandler<String>() {  
+
+		public void nextPacket(PcapPacket packet, String user) {  
+			
+			System.out.printf("Received at %s caplen=%-4d len=%-4d %s\n",   
+					new Date(packet.getCaptureHeader().timestampInMillis()),   
+					packet.getCaptureHeader().caplen(),  
+					packet.getCaptureHeader().wirelen(),   
+					user   
+					);
+			
+		   Tcp tcp = packet.getHeader(new Tcp());
+		   if(tcp !=null){   
+			long seqn= tcp.seq();
+		   String spacket = packet.toString();
+			System.out.println(spacket);
+			
+			try {
+				String MD5_ad1 = Md5Genrator.MD5(spacket);
+				System.out.println("Hash of packet  :::"+MD5_ad1+"\n");
+				Md5Genrator.wIf(seqn,MD5_ad1);
+			} catch (NoSuchAlgorithmException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} 
+           
+			
+          catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+			
+			}
+		}
+	};  
+	
+	try {  
+		pcap.loop(100, jpacketHandler, "Hash of this packet is \n");  
+	} finally { 
+		pcap.close();
+		
+	}
+		
+	}
+	
+	
+	
+}

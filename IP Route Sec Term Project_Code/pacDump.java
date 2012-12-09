@@ -1,0 +1,142 @@
+/******************************************************************************
+*pacDump.java: Written as a part of RouteSec Term project for CSC/ECE573
+*Authors: Aditya Vyas, Bhavin Shah, Manshi Choudhry, Spoorthi Gururaj 
+*Date: 20 Nov 2012
+*Written and compiled on Ubuntu 12.04, Eclipse IDE 
+*******************************************************************************
+*This program uses jNetPCap library available under open-source LGPL license
+*http://jnetpcap.com/
+*******************************************************************************
+*The program forms the portion of the project where we capture the communication
+*between the client and server.  
+*Works with counterpart program pacSend.java
+*******************************************************************************
+*Running instructions : The program has to be run with root privilege 
+*otherwire jNetPcap is not able to find a list of devices. 
+******************************************************************************/
+
+
+import java.io.BufferedReader;
+import java.io.File; 
+import java.io.InputStreamReader;
+import java.nio.ByteBuffer; 
+import java.util.ArrayList; 
+import java.util.List; 
+     
+import org.jnetpcap.Pcap; 
+import org.jnetpcap.PcapDumper; 
+import org.jnetpcap.PcapHandler; 
+import org.jnetpcap.PcapIf; 
+import org.jnetpcap.protocol.network.Ip4;
+     
+/******************************************************************************
+*Class: pacDump
+*The starter class for pacDump.java
+*Please replace the file name by the capture file to be generated and provided 
+*to program capSend.java
+******************************************************************************/
+
+     
+    public class PcapDumperExample { 
+
+/******************************************************************************
+*Method: main
+*Driver for the capture of packets from the selected interface.
+*We start with polling for the available devices to send the capture out.
+******************************************************************************/
+
+      public static void main(String args[])  { 
+
+//Getting a list of available NICs    
+
+        List<PcapIf> alldevs = new ArrayList<PcapIf>();  
+
+//Building string for error messages
+
+        StringBuilder errbuf = new StringBuilder();      
+     
+//Ensure that the program is executed as root. Otherwise no interfaces would be found.
+      
+       int r = Pcap.findAllDevs(alldevs, errbuf); 
+        if (r == Pcap.NOT_OK || alldevs.isEmpty()) { 
+          System.err.printf("Cannot read the list of devices. Did you run the program as root? %s\n",  
+            errbuf.toString()); 
+          return; 
+        } 
+      
+        System.out.println("The following network devices were found:");
+        int i = 0;
+        for (PcapIf device : alldevs) {
+            String description = (device.getDescription() != null) ? device.getDescription() : "No description available";
+            System.out.printf("#%d: %s [%s]\n", i++, device.getName(), description);
+        }
+
+//Select the appropriate interface to read and capture packets.
+     
+         System.out.println("Enter the interface number to read packets");
+         PcapIf device = null;
+  try
+  {
+         InputStreamReader daa = new InputStreamReader(System.in);
+         BufferedReader inaa = new BufferedReader(daa);
+         String l= inaa.readLine().trim();
+         Integer j = Integer.valueOf(l);
+         device = alldevs.get(j);
+  }
+  catch(Exception e)
+  {
+      e.printStackTrace();
+  }
+  
+// Capture all packets, no trucation     
+        int snaplen = 64 * 1024;    
+
+//Capture packets in promiscuous mode
+        
+        int flags = Pcap.MODE_PROMISCUOUS; 
+        int timeout = 10 * 1000;            
+        Pcap pcap = Pcap.openLive(device.getName(), snaplen, flags, timeout, errbuf); 
+        if (pcap == null) { 
+          System.err.printf("Error while opening device for capture: %s\n",  
+            errbuf.toString()); 
+          return; 
+        } 
+        System.out.println("Stream open");
+
+//Replace tmp-capture-file.cap with the required file to be generated and provided to pacSend.java
+           
+        String ofile = "/home/manshi/Desktop/IP/tmp-capture-file.cap"; 
+        File file = new File(ofile);
+        PcapDumper dumper = pcap.dumpOpen(ofile); // output file 
+        System.out.println("Dumper created");
+          
+/******************************************************************************
+* Packet handler to be called every time a packet is received. 
+******************************************************************************/
+              
+        PcapHandler<PcapDumper> dumpHandler = new PcapHandler<PcapDumper>() { 
+     
+          public void nextPacket(PcapDumper dumper, long seconds, int useconds, 
+            int caplen, int len, ByteBuffer buffer) { 
+             
+              System.out.println("Next packet");
+                
+            dumper.dump(seconds, useconds, caplen, len, buffer); 
+             
+          } 
+        }; 
+     
+               
+        pcap.loop(200, dumpHandler, dumper); 
+             
+        //File file = new File(ofile); 
+        System.out.printf("%s The file has %d bytes in it!\n", ofile, ofile.length()); 
+             
+    
+        dumper.close();
+        pcap.close(); 
+             
+       
+      } 
+    } 
+
